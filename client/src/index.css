@@ -120,6 +120,10 @@
   body {
     @apply bg-background text-foreground;
   }
+  :focus-visible {
+    outline: 3px solid oklch(0.72 0.16 240);
+    outline-offset: 3px;
+  }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   [type="button"]:not(:disabled),

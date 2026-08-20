@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, organizations, patients, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,46 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+export async function requireDb() {
+  const db = await getDb();
+  if (!db) throw new Error("데이터베이스 연결을 사용할 수 없습니다.");
+  return db;
+}
+
+export async function ensureServiceWorkspace(userId: number) {
+  const db = await requireDb();
+  const existingOrg = (await db.select().from(organizations).limit(1))[0];
+  let organization = existingOrg;
+  if (!organization) {
+    await db.insert(organizations).values({ name: "안압케어 의료기관" });
+    organization = (await db.select().from(organizations).limit(1))[0];
+  }
+  if (!organization) throw new Error("기관 초기화에 실패했습니다.");
+
+  const user = (await db.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+  if (!user) throw new Error("사용자를 찾을 수 없습니다.");
+  if (!user.organizationId) {
+    await db.update(users).set({ organizationId: organization.id }).where(eq(users.id, userId));
+  }
+  if (user.role === "patient") {
+    const patient = (await db.select().from(patients).where(and(eq(patients.organizationId, organization.id), eq(patients.userId, userId))).limit(1))[0];
+    if (!patient) {
+      await db.insert(patients).values({
+        organizationId: organization.id,
+        userId,
+        publicId: `P-${String(userId).padStart(6, "0")}`,
+      });
+    }
+  }
+  return organization;
+}
+
+export async function getPatientForUser(userId: number, organizationId: number) {
+  const db = await requireDb();
+  return (await db.select().from(patients).where(and(eq(patients.userId, userId), eq(patients.organizationId, organizationId))).limit(1))[0];
+}
+
+export async function listOrganizationUsers(organizationId: number) {
+  const db = await requireDb();
+  return db.select().from(users).where(eq(users.organizationId, organizationId)).orderBy(desc(users.createdAt));
+}
