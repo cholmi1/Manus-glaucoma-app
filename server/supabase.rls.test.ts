@@ -1,5 +1,9 @@
 import postgres from "postgres";
+import type { Request, Response } from "express";
 import { describe, expect, it } from "vitest";
+import { createContext } from "./_core/context";
+import { appRouter } from "./routers";
+import { getSupabaseAuthClient } from "./supabase";
 
 const databaseUrl = process.env.SUPABASE_DB_URL;
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
@@ -7,7 +11,7 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 type TestRole = "physician" | "educator";
 
-async function createTemporaryAuthUser(role: TestRole) {
+async function createTemporaryAuthUser(role: TestRole, password?: string) {
   const email = `rls-${role}-${crypto.randomUUID()}@example.com`;
   const response = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
     method: "POST",
@@ -16,7 +20,7 @@ async function createTemporaryAuthUser(role: TestRole) {
       Authorization: `Bearer ${serviceRoleKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ email, email_confirm: true }),
+    body: JSON.stringify({ email, email_confirm: true, ...(password ? { password } : {}) }),
   });
   const payload = await response.json() as { id?: string; message?: string };
   if (!response.ok || !payload.id) {
@@ -122,6 +126,52 @@ describe("Supabase RLS 역할 경계", () => {
     } finally {
       await sql.end({ timeout: 5 });
       await Promise.all(temporaryUsers.map(user => deleteTemporaryAuthUser(user.id)));
+    }
+  }, 45_000);
+
+  it("새 Supabase 세션은 기본 patient 프로필·기관·환자 작업공간을 자동으로 만든다", async () => {
+    expect(databaseUrl).toBeTruthy();
+    expect(supabaseUrl).toBeTruthy();
+    expect(serviceRoleKey).toBeTruthy();
+
+    const password = `RlsTest!${crypto.randomUUID()}`;
+    const temporaryUser = await createTemporaryAuthUser("educator", password);
+    const sql = postgres(databaseUrl!, { prepare: false, ssl: "require", max: 1 });
+    try {
+      const { data, error } = await getSupabaseAuthClient().auth.signInWithPassword({
+        email: temporaryUser.email,
+        password,
+      });
+      expect(error).toBeNull();
+      expect(data.session?.access_token).toBeTruthy();
+
+      const context = await createContext({
+        req: { headers: { authorization: `Bearer ${data.session!.access_token}` } } as Request,
+        res: {} as Response,
+      });
+      expect(context.user).toMatchObject({ id: temporaryUser.id, role: "patient", isActive: true });
+      expect(context.user?.organizationId).toBeTruthy();
+
+      const caller = appRouter.createCaller(context);
+      const workspace = await caller.auth.bootstrap();
+      expect(workspace).toMatchObject({ role: "patient", organizationId: context.user!.organizationId });
+
+      const patientRows = await sql`
+        select id, organization_id, user_id
+        from public.patients
+        where user_id = ${temporaryUser.id}
+        limit 1
+      `;
+      expect(patientRows).toHaveLength(1);
+      expect(patientRows[0]?.organization_id).toBe(context.user!.organizationId);
+
+      const patientScopedRows = await asAuthenticated(temporaryUser.id, tx => tx`select id from public.patients`);
+      expect(patientScopedRows.map(row => row.id)).toEqual([patientRows[0]!.id]);
+    } finally {
+      await sql`delete from public.patients where user_id = ${temporaryUser.id}`;
+      await sql`delete from public.profiles where id = ${temporaryUser.id}`;
+      await sql.end({ timeout: 5 });
+      await deleteTemporaryAuthUser(temporaryUser.id);
     }
   }, 45_000);
 });

@@ -27,7 +27,7 @@
 - [x] 전환: Supabase 프로젝트 URL·공개 키·서버 키·Transaction pooler 연결 문자열을 안전하게 검증하고 PostgreSQL 전환에 사용한다.
 - [x] 전환: 기존 MySQL Drizzle 기록과 분리된 Supabase PostgreSQL 전용 마이그레이션을 생성·검토·적용한다.
 - [x] 전환: Supabase Auth UUID 프로필·기관·patient·physician·educator·admin 역할을 RLS 정책으로 분리하고 실사용 권한을 검증한다. (실제 Supabase Auth UUID 기반 patient·admin·physician·educator PostgreSQL 세션 검증 완료)
-- [ ] 검증: 로그인한 Supabase Auth 사용자의 기본 patient 역할·기관·환자 프로필 자동 생성과 역할별 RLS 접근을 검증한다.
+- [x] 검증: 로그인한 Supabase Auth 사용자의 기본 patient 역할·기관·환자 프로필 자동 생성과 역할별 RLS 접근을 검증한다. (실제 Supabase 세션 토큰·tRPC bootstrap·PostgreSQL RLS 통합 테스트 통과)
 - [x] 운영: 첫 Supabase Auth 계정을 admin으로 초기화해 기관 사용자 역할을 관리할 수 있도록 한다.
 - [ ] 운영: 지정한 초기 운영자 이메일의 Supabase 프로필을 admin으로 승격하고 관리 대시보드 접근을 확인한다. (DB 역할 승격 검증 완료, 브라우저 대시보드 확인 대기)
 - [ ] 전환: Manus OAuth 의존성을 Supabase Auth 세션과 로그인·로그아웃·사용자 프로필 흐름으로 교체한다. (코드 교체 완료, 실제 매직링크 로그인·로그아웃 검증 대기)
