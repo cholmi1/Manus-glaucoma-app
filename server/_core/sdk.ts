@@ -30,12 +30,8 @@ const GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserI
 
 class OAuthService {
   constructor(private client: ReturnType<typeof axios.create>) {
-    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
-    if (!ENV.oAuthServerUrl) {
-      console.error(
-        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
-      );
-    }
+    // Legacy Manus OAuth is retained only for protected scheduler callbacks.
+    // Interactive application authentication is handled by Supabase Auth.
   }
 
   private decodeState(state: string): string {
@@ -285,38 +281,7 @@ class SDKServer {
       return buildCronUser(userInfo);
     }
 
-    const sessionUserId = session.openId;
-    const signedInAt = new Date();
-    let user = await db.getUserByOpenId(sessionUserId);
-
-    // If user not in DB, sync from OAuth server automatically
-    if (!user) {
-      try {
-        const userInfo = await this.getUserInfoWithJwt(sessionToken ?? "");
-        await db.upsertUser({
-          openId: userInfo.openId,
-          name: userInfo.name || null,
-          email: userInfo.email ?? null,
-          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-          lastSignedIn: signedInAt,
-        });
-        user = await db.getUserByOpenId(userInfo.openId);
-      } catch (error) {
-        console.error("[Auth] Failed to sync user from OAuth:", error);
-        throw ForbiddenError("Failed to sync user info");
-      }
-    }
-
-    if (!user) {
-      throw ForbiddenError("User not found");
-    }
-
-    await db.upsertUser({
-      openId: user.openId,
-      lastSignedIn: signedInAt,
-    });
-
-    return user;
+    throw ForbiddenError("Manus OAuth is disabled. Supabase Auth token is required.");
   }
 }
 
@@ -333,16 +298,12 @@ function buildCronUser(
 ): AuthenticatedUser {
   const now = new Date();
   return {
-    id: -1,
-    openId: userInfo.openId,
+    id: "00000000-0000-0000-0000-000000000000",
     organizationId: null,
     name: userInfo.name || "Manus Scheduled Task",
     email: null,
-    loginMethod: null,
     role: "admin",
     isActive: true,
-    failedLoginCount: 0,
-    lockedUntil: null,
     createdAt: now,
     updatedAt: now,
     lastSignedIn: now,

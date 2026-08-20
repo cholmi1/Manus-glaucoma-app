@@ -19,7 +19,7 @@ const requireUser = t.middleware(async opts => {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
 
-  if (!ctx.user.isActive || (ctx.user.lockedUntil && ctx.user.lockedUntil > new Date())) {
+  if (!ctx.user.isActive) {
     throw new TRPCError({ code: "FORBIDDEN", message: "현재 계정은 사용할 수 없습니다." });
   }
 

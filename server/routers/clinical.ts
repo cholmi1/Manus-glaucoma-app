@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import {
   dashboardPreferences,
@@ -25,11 +25,11 @@ function forbidden(message = "요청한 환자 정보에 접근할 권한이 없
   return new TRPCError({ code: "FORBIDDEN", message });
 }
 
-async function resolveWorkspace(actorId: number) {
+async function resolveWorkspace(actorId: string) {
   return ensureServiceWorkspace(actorId);
 }
 
-async function assertPatientAccess(input: { actor: { id: number; role: string }; patientId: number; organizationId: number }) {
+async function assertPatientAccess(input: { actor: { id: string; role: string }; patientId: number; organizationId: number }) {
   const db = await requireDb();
   const patient = (await db.select().from(patients).where(and(eq(patients.id, input.patientId), eq(patients.organizationId, input.organizationId))).limit(1))[0];
   if (!patient) throw forbidden("현재 기관에 등록된 환자를 찾을 수 없습니다.");
@@ -42,7 +42,7 @@ async function assertPatientAccess(input: { actor: { id: number; role: string };
   return patient;
 }
 
-async function currentPatientId(actor: { id: number; role: string }, organizationId: number) {
+async function currentPatientId(actor: { id: string; role: string }, organizationId: number) {
   if (actor.role !== "patient") return null;
   const patient = await getPatientForUser(actor.id, organizationId);
   if (!patient) throw forbidden("환자 프로필을 초기화한 뒤 다시 시도해 주세요.");
@@ -122,7 +122,7 @@ export const clinicalRouter = router({
       save: clinicianProcedure.input(z.object({ patientColumns: z.array(z.string().min(1)).min(1).max(8), patientFilters: z.record(z.string(), z.unknown()) })).mutation(async ({ ctx, input }) => {
         const actor = ctx.user!;
         const db = await requireDb();
-        await db.insert(dashboardPreferences).values({ userId: actor.id, patientColumns: input.patientColumns, patientFilters: input.patientFilters }).onDuplicateKeyUpdate({ set: { patientColumns: input.patientColumns, patientFilters: input.patientFilters, updatedAt: new Date() } });
+        await db.insert(dashboardPreferences).values({ userId: actor.id, patientColumns: input.patientColumns, patientFilters: input.patientFilters }).onConflictDoUpdate({ target: dashboardPreferences.userId, set: { patientColumns: input.patientColumns, patientFilters: input.patientFilters, updatedAt: new Date() } });
         return { success: true } as const;
       }),
     }),
@@ -167,7 +167,7 @@ export const clinicalRouter = router({
           quality: item.quality,
           source: item.source,
           context: item.context ?? null,
-        }).onDuplicateKeyUpdate({ set: { idempotencyKey: sql`${iopMeasurements.idempotencyKey}` } });
+        }).onConflictDoNothing({ target: [iopMeasurements.patientId, iopMeasurements.idempotencyKey] });
       }
       await appendAuditLog({ organizationId: organization.id, actorUserId: actor.id, patientId: input.patientId, action: "measurement_upload", targetType: "iop_measurement", detail: { count: uniqueItems.length, duplicateCount: input.items.length - uniqueItems.length, source: uniqueItems[0]?.source } });
       return { stored: uniqueItems.length, rejected: 0, reason: null };
@@ -209,7 +209,7 @@ export const clinicalRouter = router({
       const uniqueEvents = deduplicateByIdempotency(input.events);
       if (uniqueEvents.some(event => !allowed.has(event.prescriptionId))) throw forbidden("현재 환자의 처방에 속하지 않는 점안 이벤트가 포함되어 있습니다.");
       for (const event of uniqueEvents) {
-        await db.insert(doseEvents).values({ organizationId: organization.id, patientId: input.patientId, prescriptionId: event.prescriptionId, scheduledDate: event.scheduledDate, scheduledTime: event.scheduledTime, eye: event.eye, taken: event.taken, takenAt: event.taken ? (event.takenAt ?? new Date()) : null, source: event.source, idempotencyKey: event.idempotencyKey }).onDuplicateKeyUpdate({ set: { taken: event.taken, takenAt: event.taken ? (event.takenAt ?? new Date()) : null, source: event.source, updatedAt: new Date() } });
+        await db.insert(doseEvents).values({ organizationId: organization.id, patientId: input.patientId, prescriptionId: event.prescriptionId, scheduledDate: event.scheduledDate, scheduledTime: event.scheduledTime, eye: event.eye, taken: event.taken, takenAt: event.taken ? (event.takenAt ?? new Date()) : null, source: event.source, idempotencyKey: event.idempotencyKey }).onConflictDoUpdate({ target: [doseEvents.patientId, doseEvents.idempotencyKey], set: { taken: event.taken, takenAt: event.taken ? (event.takenAt ?? new Date()) : null, source: event.source, updatedAt: new Date() } });
       }
       await appendAuditLog({ organizationId: organization.id, actorUserId: actor.id, patientId: input.patientId, action: "dose_sync", targetType: "dose_event", detail: { count: uniqueEvents.length, duplicateCount: input.events.length - uniqueEvents.length } });
       return { synced: uniqueEvents.length };
@@ -237,9 +237,9 @@ export const clinicalRouter = router({
       const organization = await resolveWorkspace(actor.id);
       await assertPatientAccess({ actor, patientId: input.patientId, organizationId: organization.id });
       const db = await requireDb();
-      const result = await db.insert(prescriptions).values({ organizationId: organization.id, patientId: input.patientId, medicineName: input.medicineName, ingredient: input.ingredient ?? null, eye: input.eye, scheduleTimes: input.scheduleTimes, isPrn: input.isPrn, startDate: input.startDate, endDate: input.endDate ?? null, prescribedByUserId: actor.id });
-      await appendAuditLog({ organizationId: organization.id, actorUserId: actor.id, patientId: input.patientId, action: "prescription_created", targetType: "prescription", targetId: String(result[0].insertId) });
-      return { id: Number(result[0].insertId) };
+      const [created] = await db.insert(prescriptions).values({ organizationId: organization.id, patientId: input.patientId, medicineName: input.medicineName, ingredient: input.ingredient ?? null, eye: input.eye, scheduleTimes: input.scheduleTimes, isPrn: input.isPrn, startDate: input.startDate, endDate: input.endDate ?? null, prescribedByUserId: actor.id }).returning({ id: prescriptions.id });
+      await appendAuditLog({ organizationId: organization.id, actorUserId: actor.id, patientId: input.patientId, action: "prescription_created", targetType: "prescription", targetId: String(created.id) });
+      return { id: created.id };
     }),
   }),
 
@@ -256,9 +256,9 @@ export const clinicalRouter = router({
       const organization = await resolveWorkspace(actor.id);
       await assertPatientAccess({ actor, patientId: input.patientId, organizationId: organization.id });
       const db = await requireDb();
-      const result = await db.insert(iopTargets).values({ patientId: input.patientId, targetOd: String(input.targetOd), targetOs: String(input.targetOs), effectiveFrom: input.effectiveFrom, setByUserId: actor.id });
-      await appendAuditLog({ organizationId: organization.id, actorUserId: actor.id, patientId: input.patientId, action: "target_iop_set", targetType: "iop_target", targetId: String(result[0].insertId), detail: { targetOd: input.targetOd, targetOs: input.targetOs } });
-      return { id: Number(result[0].insertId) };
+      const [created] = await db.insert(iopTargets).values({ patientId: input.patientId, targetOd: String(input.targetOd), targetOs: String(input.targetOs), effectiveFrom: input.effectiveFrom, setByUserId: actor.id }).returning({ id: iopTargets.id });
+      await appendAuditLog({ organizationId: organization.id, actorUserId: actor.id, patientId: input.patientId, action: "target_iop_set", targetType: "iop_target", targetId: String(created.id), detail: { targetOd: input.targetOd, targetOs: input.targetOs } });
+      return { id: created.id };
     }),
   }),
 

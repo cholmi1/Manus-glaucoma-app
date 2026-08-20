@@ -1,15 +1,11 @@
 import { defineConfig } from "drizzle-kit";
 
 const connectionString = process.env.SUPABASE_DB_URL;
-if (!connectionString) {
-  throw new Error("SUPABASE_DB_URL is required to run drizzle commands");
-}
+if (!connectionString) throw new Error("SUPABASE_DB_URL is required to generate Supabase migrations");
 
 export default defineConfig({
   schema: "./drizzle/schema.ts",
-  out: "./drizzle",
+  out: "./supabase/migrations",
   dialect: "postgresql",
-  dbCredentials: {
-    url: connectionString,
-  },
+  dbCredentials: { url: connectionString },
 });

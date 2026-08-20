@@ -1,5 +1,4 @@
 import { COOKIE_NAME } from "@shared/const";
-import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { ensureServiceWorkspace, listOrganizationUsers, requireDb } from "./db";
@@ -27,13 +26,7 @@ export const appRouter = router({
       });
       return { organizationId: organization.id, role: actor.role };
     }),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
-    }),
+    logout: publicProcedure.mutation(() => ({ success: true } as const)),
   }),
 
   members: router({
@@ -42,7 +35,7 @@ export const appRouter = router({
       const organization = await ensureServiceWorkspace(actor.id);
       return listOrganizationUsers(organization.id);
     }),
-    setRole: adminProcedure.input(z.object({ userId: z.number().int().positive(), role: z.enum(["patient", "physician", "educator", "admin"]) })).mutation(async ({ ctx, input }) => {
+    setRole: adminProcedure.input(z.object({ userId: z.string().uuid(), role: z.enum(["patient", "physician", "educator", "admin"]) })).mutation(async ({ ctx, input }) => {
       const actor = ctx.user!;
       const organization = await ensureServiceWorkspace(actor.id);
       if (input.userId === actor.id) throw new Error("현재 로그인한 관리자의 역할은 이 화면에서 변경할 수 없습니다.");
@@ -53,7 +46,7 @@ export const appRouter = router({
       await appendAuditLog({ organizationId: organization.id, actorUserId: actor.id, action: "role_changed", targetType: "user", targetId: String(input.userId), detail: { role: input.role } });
       return { success: true } as const;
     }),
-    setActive: adminProcedure.input(z.object({ userId: z.number().int().positive(), isActive: z.boolean() })).mutation(async ({ ctx, input }) => {
+    setActive: adminProcedure.input(z.object({ userId: z.string().uuid(), isActive: z.boolean() })).mutation(async ({ ctx, input }) => {
       const actor = ctx.user!;
       const organization = await ensureServiceWorkspace(actor.id);
       if (input.userId === actor.id) throw new Error("현재 로그인한 관리자 계정은 비활성화할 수 없습니다.");

@@ -10,14 +10,14 @@ function stableJson(value: unknown): string {
   return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
 }
 
-export function createAuditEntryHash(input: { previousHash: string | null; organizationId: number; actorUserId: number | null; patientId: number | null; action: string; targetType: string; targetId: string | null; detail: Record<string, unknown> }) {
+export function createAuditEntryHash(input: { previousHash: string | null; organizationId: number; actorUserId: string | null; patientId: number | null; action: string; targetType: string; targetId: string | null; detail: Record<string, unknown> }) {
   const payload = [input.previousHash ?? "GENESIS", input.organizationId, input.actorUserId ?? "", input.patientId ?? "", input.action, input.targetType, input.targetId ?? "", stableJson(input.detail)].join("|");
   return createHash("sha256").update(payload).digest("hex");
 }
 
 export async function appendAuditLog(input: {
   organizationId: number;
-  actorUserId?: number | null;
+  actorUserId?: string | null;
   patientId?: number | null;
   action: string;
   targetType: string;

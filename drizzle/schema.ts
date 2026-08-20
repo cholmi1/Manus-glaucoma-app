@@ -1,202 +1,204 @@
 import {
   boolean,
-  decimal,
   index,
-  int,
-  json,
-  mysqlEnum,
-  mysqlTable,
+  integer,
+  jsonb,
+  numeric,
+  pgEnum,
+  pgTable,
+  serial,
+  text,
   timestamp,
   uniqueIndex,
+  uuid,
   varchar,
-  text,
-} from "drizzle-orm/mysql-core";
+} from "drizzle-orm/pg-core";
 
 export const appRoles = ["patient", "physician", "educator", "admin"] as const;
 export const eyes = ["OD", "OS"] as const;
 
-export const organizations = mysqlTable("organizations", {
-  id: int("id").autoincrement().primaryKey(),
+export const appRoleEnum = pgEnum("app_role", appRoles);
+export const eyeEnum = pgEnum("eye", eyes);
+export const deviceOwnershipEnum = pgEnum("device_ownership", ["org", "patient"]);
+export const deviceUsageEnum = pgEnum("device_usage", ["clinic", "home"]);
+export const deviceStatusEnum = pgEnum("device_status", ["active", "maintenance", "inactive", "blocked"]);
+export const measurementQualityEnum = pgEnum("measurement_quality", ["excellent", "good", "retake"]);
+export const measurementSourceEnum = pgEnum("measurement_source", ["auto", "manual", "offline_sync"]);
+export const doseSourceEnum = pgEnum("dose_source", ["manual", "device", "offline_sync"]);
+export const prescriptionEyeEnum = pgEnum("prescription_eye", ["OD", "OS", "both"]);
+export const assignmentKindEnum = pgEnum("assignment_kind", ["rental", "owned"]);
+export const notificationCategoryEnum = pgEnum("notification_category", ["rental", "measurement", "adherence"]);
+export const notificationLevelEnum = pgEnum("notification_level", ["d3", "d1", "d0", "overdue", "blocked"]);
+export const notificationChannelEnum = pgEnum("notification_channel", ["in_app", "push", "sms", "call"]);
+export const notificationModeEnum = pgEnum("notification_mode", ["auto", "manual"]);
+export const notificationStatusEnum = pgEnum("notification_status", ["queued", "sent", "failed", "skipped"]);
+
+export const organizations = pgTable("organizations", {
+  id: serial("id").primaryKey(),
   name: varchar("name", { length: 120 }).notNull(),
   country: varchar("country", { length: 2 }).notNull().default("KR"),
   timezone: varchar("timezone", { length: 64 }).notNull().default("Asia/Seoul"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
-  organizationId: int("organizationId"),
+/** `id` is the Supabase Auth user UUID (`auth.users.id`). */
+export const users = pgTable("profiles", {
+  id: uuid("id").primaryKey(),
+  organizationId: integer("organization_id"),
   name: text("name"),
   email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", appRoles).default("patient").notNull(),
-  isActive: boolean("isActive").notNull().default(true),
-  failedLoginCount: int("failedLoginCount").notNull().default(0),
-  lockedUntil: timestamp("lockedUntil"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
-}, table => [index("users_org_role_idx").on(table.organizationId, table.role)]);
+  role: appRoleEnum("role").notNull().default("patient"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  lastSignedIn: timestamp("last_signed_in", { withTimezone: true }).defaultNow().notNull(),
+}, table => [index("profiles_org_role_idx").on(table.organizationId, table.role)]);
 
-export const patients = mysqlTable("patients", {
-  id: int("id").autoincrement().primaryKey(),
-  organizationId: int("organizationId").notNull(),
-  userId: int("userId"),
-  publicId: varchar("publicId", { length: 24 }).notNull().unique(),
-  chartNumber: varchar("chartNumber", { length: 48 }),
+export const patients = pgTable("patients", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull(),
+  userId: uuid("user_id"),
+  publicId: varchar("public_id", { length: 24 }).notNull().unique(),
+  chartNumber: varchar("chart_number", { length: 48 }),
   diagnosis: varchar("diagnosis", { length: 160 }),
-  isActive: boolean("isActive").notNull().default(true),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, table => [
-  uniqueIndex("patients_org_user_uq").on(table.organizationId, table.userId),
-  index("patients_org_active_idx").on(table.organizationId, table.isActive),
-]);
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, table => [uniqueIndex("patients_org_user_uq").on(table.organizationId, table.userId), index("patients_org_active_idx").on(table.organizationId, table.isActive)]);
 
-export const iopTargets = mysqlTable("iopTargets", {
-  id: int("id").autoincrement().primaryKey(),
-  patientId: int("patientId").notNull(),
-  targetOd: decimal("targetOd", { precision: 4, scale: 1 }).notNull(),
-  targetOs: decimal("targetOs", { precision: 4, scale: 1 }).notNull(),
-  effectiveFrom: varchar("effectiveFrom", { length: 10 }).notNull(),
-  setByUserId: int("setByUserId").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+export const iopTargets = pgTable("iop_targets", {
+  id: serial("id").primaryKey(),
+  patientId: integer("patient_id").notNull(),
+  targetOd: numeric("target_od", { precision: 4, scale: 1 }).notNull(),
+  targetOs: numeric("target_os", { precision: 4, scale: 1 }).notNull(),
+  effectiveFrom: varchar("effective_from", { length: 10 }).notNull(),
+  setByUserId: uuid("set_by_user_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, table => [index("iop_targets_patient_date_idx").on(table.patientId, table.effectiveFrom)]);
 
-export const devices = mysqlTable("devices", {
-  id: int("id").autoincrement().primaryKey(),
-  organizationId: int("organizationId").notNull(),
+export const devices = pgTable("devices", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull(),
   serial: varchar("serial", { length: 40 }).notNull().unique(),
   name: varchar("name", { length: 96 }).notNull(),
   model: varchar("model", { length: 40 }).notNull().default("CVT200"),
-  ownership: mysqlEnum("ownership", ["org", "patient"]).notNull(),
-  usage: mysqlEnum("usage", ["clinic", "home"]).notNull().default("home"),
-  status: mysqlEnum("status", ["active", "maintenance", "inactive", "blocked"]).notNull().default("active"),
-  isActive: boolean("isActive").notNull().default(true),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  ownership: deviceOwnershipEnum("ownership").notNull(),
+  usage: deviceUsageEnum("usage").notNull().default("home"),
+  status: deviceStatusEnum("status").notNull().default("active"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const deviceAssignments = mysqlTable("deviceAssignments", {
-  id: int("id").autoincrement().primaryKey(),
-  deviceId: int("deviceId").notNull(),
-  patientId: int("patientId").notNull(),
-  kind: mysqlEnum("kind", ["rental", "owned"]).notNull(),
-  rentFrom: varchar("rentFrom", { length: 10 }),
-  rentTo: varchar("rentTo", { length: 10 }),
-  returnedAt: timestamp("returnedAt"),
-  linkedAt: timestamp("linkedAt"),
-  unlinkedAt: timestamp("unlinkedAt"),
-  assignedByUserId: int("assignedByUserId").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, table => [
-  index("device_assignments_patient_idx").on(table.patientId, table.createdAt),
-  index("device_assignments_device_idx").on(table.deviceId, table.returnedAt, table.unlinkedAt),
-]);
+export const deviceAssignments = pgTable("device_assignments", {
+  id: serial("id").primaryKey(),
+  deviceId: integer("device_id").notNull(),
+  patientId: integer("patient_id").notNull(),
+  kind: assignmentKindEnum("kind").notNull(),
+  rentFrom: varchar("rent_from", { length: 10 }),
+  rentTo: varchar("rent_to", { length: 10 }),
+  returnedAt: timestamp("returned_at", { withTimezone: true }),
+  linkedAt: timestamp("linked_at", { withTimezone: true }),
+  unlinkedAt: timestamp("unlinked_at", { withTimezone: true }),
+  assignedByUserId: uuid("assigned_by_user_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, table => [index("device_assignments_patient_idx").on(table.patientId, table.createdAt), index("device_assignments_device_idx").on(table.deviceId, table.returnedAt, table.unlinkedAt)]);
 
-export const deviceStatusHistory = mysqlTable("deviceStatusHistory", {
-  id: int("id").autoincrement().primaryKey(),
-  deviceId: int("deviceId").notNull(),
-  previousStatus: varchar("previousStatus", { length: 24 }),
-  nextStatus: varchar("nextStatus", { length: 24 }).notNull(),
+export const deviceStatusHistory = pgTable("device_status_history", {
+  id: serial("id").primaryKey(),
+  deviceId: integer("device_id").notNull(),
+  previousStatus: varchar("previous_status", { length: 24 }),
+  nextStatus: varchar("next_status", { length: 24 }).notNull(),
   reason: varchar("reason", { length: 240 }),
-  changedByUserId: int("changedByUserId").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  changedByUserId: uuid("changed_by_user_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, table => [index("device_history_device_idx").on(table.deviceId, table.createdAt)]);
 
-export const iopMeasurements = mysqlTable("iopMeasurements", {
-  id: int("id").autoincrement().primaryKey(),
-  organizationId: int("organizationId").notNull(),
-  patientId: int("patientId").notNull(),
-  deviceId: int("deviceId"),
-  idempotencyKey: varchar("idempotencyKey", { length: 96 }).notNull(),
-  measuredAt: timestamp("measuredAt").notNull(),
-  eye: mysqlEnum("eye", eyes).notNull(),
-  valueMmhg: decimal("valueMmhg", { precision: 4, scale: 1 }).notNull(),
-  quality: mysqlEnum("quality", ["excellent", "good", "retake"]).notNull().default("good"),
-  source: mysqlEnum("source", ["auto", "manual", "offline_sync"]).notNull(),
+export const iopMeasurements = pgTable("iop_measurements", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull(),
+  patientId: integer("patient_id").notNull(),
+  deviceId: integer("device_id"),
+  idempotencyKey: varchar("idempotency_key", { length: 96 }).notNull(),
+  measuredAt: timestamp("measured_at", { withTimezone: true }).notNull(),
+  eye: eyeEnum("eye").notNull(),
+  valueMmhg: numeric("value_mmhg", { precision: 4, scale: 1 }).notNull(),
+  quality: measurementQualityEnum("quality").notNull().default("good"),
+  source: measurementSourceEnum("source").notNull(),
   context: varchar("context", { length: 48 }),
-  isExcluded: boolean("isExcluded").notNull().default(false),
-  excludedByUserId: int("excludedByUserId"),
-  excludedAt: timestamp("excludedAt"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, table => [
-  uniqueIndex("iop_measurements_idempotency_uq").on(table.patientId, table.idempotencyKey),
-  index("iop_measurements_patient_time_idx").on(table.patientId, table.measuredAt),
-]);
+  isExcluded: boolean("is_excluded").notNull().default(false),
+  excludedByUserId: uuid("excluded_by_user_id"),
+  excludedAt: timestamp("excluded_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, table => [uniqueIndex("iop_measurements_idempotency_uq").on(table.patientId, table.idempotencyKey), index("iop_measurements_patient_time_idx").on(table.patientId, table.measuredAt)]);
 
-export const prescriptions = mysqlTable("prescriptions", {
-  id: int("id").autoincrement().primaryKey(),
-  organizationId: int("organizationId").notNull(),
-  patientId: int("patientId").notNull(),
-  medicineName: varchar("medicineName", { length: 120 }).notNull(),
+export const prescriptions = pgTable("prescriptions", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull(),
+  patientId: integer("patient_id").notNull(),
+  medicineName: varchar("medicine_name", { length: 120 }).notNull(),
   ingredient: varchar("ingredient", { length: 160 }),
-  eye: mysqlEnum("eye", ["OD", "OS", "both"]).notNull(),
-  scheduleTimes: json("scheduleTimes").$type<string[]>().notNull(),
-  isPrn: boolean("isPrn").notNull().default(false),
-  startDate: varchar("startDate", { length: 10 }).notNull(),
-  endDate: varchar("endDate", { length: 10 }),
-  prescribedByUserId: int("prescribedByUserId").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  eye: prescriptionEyeEnum("eye").notNull(),
+  scheduleTimes: jsonb("schedule_times").$type<string[]>().notNull(),
+  isPrn: boolean("is_prn").notNull().default(false),
+  startDate: varchar("start_date", { length: 10 }).notNull(),
+  endDate: varchar("end_date", { length: 10 }),
+  prescribedByUserId: uuid("prescribed_by_user_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, table => [index("prescriptions_patient_idx").on(table.patientId, table.startDate)]);
 
-export const doseEvents = mysqlTable("doseEvents", {
-  id: int("id").autoincrement().primaryKey(),
-  organizationId: int("organizationId").notNull(),
-  patientId: int("patientId").notNull(),
-  prescriptionId: int("prescriptionId").notNull(),
-  scheduledDate: varchar("scheduledDate", { length: 10 }).notNull(),
-  scheduledTime: varchar("scheduledTime", { length: 5 }).notNull(),
-  eye: mysqlEnum("eye", eyes).notNull(),
+export const doseEvents = pgTable("dose_events", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull(),
+  patientId: integer("patient_id").notNull(),
+  prescriptionId: integer("prescription_id").notNull(),
+  scheduledDate: varchar("scheduled_date", { length: 10 }).notNull(),
+  scheduledTime: varchar("scheduled_time", { length: 5 }).notNull(),
+  eye: eyeEnum("eye").notNull(),
   taken: boolean("taken").notNull().default(false),
-  takenAt: timestamp("takenAt"),
-  source: mysqlEnum("source", ["manual", "device", "offline_sync"]).notNull().default("manual"),
-  idempotencyKey: varchar("idempotencyKey", { length: 96 }).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, table => [
-  uniqueIndex("dose_events_schedule_uq").on(table.prescriptionId, table.scheduledDate, table.scheduledTime, table.eye),
-  uniqueIndex("dose_events_idempotency_uq").on(table.patientId, table.idempotencyKey),
-  index("dose_events_patient_date_idx").on(table.patientId, table.scheduledDate),
-]);
+  takenAt: timestamp("taken_at", { withTimezone: true }),
+  source: doseSourceEnum("source").notNull().default("manual"),
+  idempotencyKey: varchar("idempotency_key", { length: 96 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, table => [uniqueIndex("dose_events_schedule_uq").on(table.prescriptionId, table.scheduledDate, table.scheduledTime, table.eye), uniqueIndex("dose_events_idempotency_uq").on(table.patientId, table.idempotencyKey), index("dose_events_patient_date_idx").on(table.patientId, table.scheduledDate)]);
 
-export const notifications = mysqlTable("notifications", {
-  id: int("id").autoincrement().primaryKey(),
-  organizationId: int("organizationId").notNull(),
-  patientId: int("patientId").notNull(),
-  deviceAssignmentId: int("deviceAssignmentId"),
-  category: mysqlEnum("category", ["rental", "measurement", "adherence"]).notNull(),
-  level: mysqlEnum("level", ["d3", "d1", "d0", "overdue", "blocked"]).notNull(),
-  channel: mysqlEnum("channel", ["in_app", "push", "sms", "call"]).notNull().default("in_app"),
-  mode: mysqlEnum("mode", ["auto", "manual"]).notNull().default("auto"),
-  status: mysqlEnum("status", ["queued", "sent", "failed", "skipped"]).notNull().default("queued"),
-  idempotencyKey: varchar("idempotencyKey", { length: 140 }).notNull().unique(),
-  detail: json("detail").$type<Record<string, unknown>>(),
-  sentAt: timestamp("sentAt"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull(),
+  patientId: integer("patient_id").notNull(),
+  deviceAssignmentId: integer("device_assignment_id"),
+  category: notificationCategoryEnum("category").notNull(),
+  level: notificationLevelEnum("level").notNull(),
+  channel: notificationChannelEnum("channel").notNull().default("in_app"),
+  mode: notificationModeEnum("mode").notNull().default("auto"),
+  status: notificationStatusEnum("status").notNull().default("queued"),
+  idempotencyKey: varchar("idempotency_key", { length: 140 }).notNull().unique(),
+  detail: jsonb("detail").$type<Record<string, unknown>>(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const auditLogs = mysqlTable("auditLogs", {
-  id: int("id").autoincrement().primaryKey(),
-  organizationId: int("organizationId").notNull(),
-  actorUserId: int("actorUserId"),
-  patientId: int("patientId"),
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull(),
+  actorUserId: uuid("actor_user_id"),
+  patientId: integer("patient_id"),
   action: varchar("action", { length: 48 }).notNull(),
-  targetType: varchar("targetType", { length: 48 }).notNull(),
-  targetId: varchar("targetId", { length: 80 }),
-  detail: json("detail").$type<Record<string, unknown>>(),
-  ipHash: varchar("ipHash", { length: 128 }),
-  previousHash: varchar("previousHash", { length: 64 }),
-  entryHash: varchar("entryHash", { length: 64 }),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  targetType: varchar("target_type", { length: 48 }).notNull(),
+  targetId: varchar("target_id", { length: 80 }),
+  detail: jsonb("detail").$type<Record<string, unknown>>(),
+  ipHash: varchar("ip_hash", { length: 128 }),
+  previousHash: varchar("previous_hash", { length: 64 }),
+  entryHash: varchar("entry_hash", { length: 64 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, table => [index("audit_logs_patient_time_idx").on(table.patientId, table.createdAt), index("audit_logs_actor_time_idx").on(table.actorUserId, table.createdAt)]);
 
-export const dashboardPreferences = mysqlTable("dashboardPreferences", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().unique(),
-  patientColumns: json("patientColumns").$type<string[]>().notNull(),
-  patientFilters: json("patientFilters").$type<Record<string, unknown>>().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+export const dashboardPreferences = pgTable("dashboard_preferences", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").notNull().unique(),
+  patientColumns: jsonb("patient_columns").$type<string[]>().notNull(),
+  patientFilters: jsonb("patient_filters").$type<Record<string, unknown>>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export type User = typeof users.$inferSelect;
