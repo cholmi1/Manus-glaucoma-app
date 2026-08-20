@@ -2,16 +2,16 @@
 
 ## 먼저 이해할 점
 
-현재 안압케어는 **React 화면 + Express/tRPC 서버 + MySQL/TiDB용 Drizzle 스키마 + Manus OAuth** 구조입니다. Supabase는 PostgreSQL, Auth, Storage, Data API 등을 제공하는 백엔드 플랫폼입니다. 따라서 Supabase를 사용하려면 단순히 연결 문자열만 바꾸는 것이 아니라, **MySQL 전용 DB 코드와 인증 연결을 PostgreSQL/Supabase 방식으로 변환**해야 합니다.
+안압케어는 이제 **React 화면 + Express/tRPC 서버 + Supabase PostgreSQL + Supabase Auth 매직링크** 구조로 전환되었습니다. Supabase는 PostgreSQL, Auth, Storage, Data API 등을 제공하는 백엔드 플랫폼입니다. 앱의 코드 전환과 RLS 정책 적용은 완료되었지만, 실제 운영 전에는 로그인 이메일 발송·리디렉션 주소·역할별 화면을 직접 확인해야 합니다.
 
 > 가장 안전한 방법은 현재 운영 중인 앱을 바로 바꾸지 않고, 먼저 Supabase에 **별도의 개발용 프로젝트**를 만든 뒤 연결과 로그인부터 검증하는 것입니다. 실제 환자 데이터는 전환 검증이 끝나기 전까지 입력하거나 복사하지 마세요.
 
-| 구분 | 현재 안압케어 | Supabase 전환 뒤 |
+| 구분 | 이전 구조 | 현재 안압케어 |
 |---|---|---|
-| 데이터베이스 | MySQL/TiDB + Drizzle MySQL | Supabase PostgreSQL + PostgreSQL용 Drizzle 또는 Supabase Data API |
-| 로그인 | Manus OAuth | 선택 필요: Manus OAuth 유지 또는 Supabase Auth로 전환 |
-| 사용자 권한 | 서버 tRPC RBAC | 서버 RBAC 유지 + Supabase RLS 추가 권장 |
-| 웹사이트 실행 | Manus 프로젝트 서버 | 별도 웹 호스팅 필요: Manus 기본 호스팅 또는 외부 호스팅 |
+| 데이터베이스 | MySQL/TiDB + Drizzle MySQL | Supabase PostgreSQL + PostgreSQL용 Drizzle |
+| 로그인 | Manus OAuth | Supabase Auth 이메일 매직링크 |
+| 사용자 권한 | 서버 tRPC RBAC | 서버 RBAC + Supabase RLS 이중 검사 |
+| 웹사이트 실행 | Manus 프로젝트 서버 | Manus 기본 호스팅 배포 준비 완료 |
 
 Supabase는 데이터베이스·인증을 제공하지만, 현재의 Express 웹 서버를 그대로 자동 호스팅하는 서비스는 아닙니다. 따라서 **Supabase는 백엔드**, GitHub는 **소스 코드 보관소**, Manus 기본 호스팅 또는 다른 호스팅 서비스는 **웹사이트 실행 장소**로 이해하면 됩니다.
 
@@ -63,28 +63,28 @@ Supabase React 가이드는 Project URL과 publishable key를 클라이언트 �
 
 Supabase 공식 문서는 서버리스·엣지 환경에서는 Transaction pooler를, 지속형 백엔드에는 Direct connection 또는 Session pooler를 선택하도록 설명합니다.[3]
 
-## 4단계 — 로그인 방식은 먼저 결정하기
+## 4단계 — 로그인 전환 상태 확인하기
 
-현재 프로젝트는 Manus OAuth로 로그인합니다. Supabase 전환 시 아래 둘 중 하나를 선택해야 합니다.
+안압케어는 **Supabase Auth 이메일 매직링크**로 전환되어 있습니다. 사용자가 이메일 주소를 입력하면 Supabase가 로그인 링크를 보내고, 링크를 열면 브라우저가 Supabase 세션을 받아 서버 API에 전달합니다. 서버 RBAC와 PostgreSQL RLS가 함께 역할·기관·환자 범위를 검사합니다.
 
-| 선택지 | 장점 | 주의할 점 | 초보자 권장도 |
-|---|---|---|---|
-| **A. Manus OAuth를 당분간 유지** | 현재 로그인 화면을 즉시 유지 | Supabase `auth.users`와 현재 사용자 ID를 연결하는 별도 설계가 필요 | 중간 |
-| **B. Supabase Auth로 전환** | Supabase Auth·JWT·RLS를 하나의 체계로 운영 | 로그인 화면과 서버 인증 코드를 바꿔야 함 | **권장** |
+| 항목 | 현재 적용 상태 | 운영 전 확인할 내용 |
+|---|---|---|
+| 로그인 방식 | Supabase Auth 매직링크 | 이메일 수신·링크 클릭·로그아웃 직접 확인 |
+| 프로필 자동 생성 | 기본 `patient` 역할·기관·환자 프로필 생성 | 새 테스트 계정으로 생성 결과 확인 |
+| 운영자 초기화 | 지정 운영자 프로필의 `admin` 승격 완료 | 운영자 계정 로그인 후 관리자 화면 확인 |
+| 권한 보안 | 서버 RBAC + PostgreSQL RLS | patient·physician·educator·admin별 허용·차단 확인 |
 
-새로 시작하는 의료 플랫폼이라면 **B. Supabase Auth**를 권장합니다. 처음에는 이메일 매직링크 또는 이메일/비밀번호 로그인으로 시작하고, 이후 병원 정책에 따라 MFA 또는 SSO를 검토합니다. Supabase Auth는 JWT를 사용하며 RLS와 연동하여 행 단위 접근 제어를 구성할 수 있습니다.[4]
+## 5단계 — 코드 전환 완료 항목 확인하기
 
-## 5단계 — 코드 변환은 제가 진행할 부분입니다
+다음 전환 작업은 코드·마이그레이션·자동 테스트 수준에서 완료되었습니다.
 
-1~4단계를 마친 뒤에는 제가 GitHub 저장소의 현재 코드를 다음 순서로 변환합니다.
-
-1. `mysql2`와 MySQL용 Drizzle 구성을 PostgreSQL용 드라이버 및 스키마로 교체합니다.
-2. 현재의 `organizations`, `users`, `patients`, `iopMeasurements`, `doseEvents`, `devices`, `notifications`, `auditLogs` 테이블을 PostgreSQL SQL 마이그레이션으로 변환합니다.
-3. Supabase Auth 사용자와 `profiles`/역할 테이블을 연결합니다.
-4. `patient`, `physician`, `educator`, `admin` 역할별 RLS 정책을 작성합니다.
+1. MySQL 전용 Drizzle 구성을 PostgreSQL용 드라이버와 스키마로 교체했습니다.
+2. `organizations`, `profiles`, `patients`, `iop_measurements`, `dose_events`, `devices`, `notifications`, `audit_logs`를 포함한 도메인 테이블을 Supabase에 적용했습니다.
+3. Supabase Auth 사용자와 `profiles`/역할 테이블을 연결했습니다.
+4. `patient`, `physician`, `educator`, `admin` 역할별 RLS 정책을 적용했습니다.
 5. 서버 측 tRPC 권한 검사도 유지합니다. **RLS는 추가 안전망이지 서버 RBAC를 대체하지 않습니다.**
-6. e약은요 서비스 키, Supabase service role key 같은 비밀 값은 서버 환경변수에만 등록합니다.
-7. 가상의 테스트 기록으로 로그인, 안압 저장, 점안 동기화, 감사 로그, RLS 차단을 확인합니다.
+6. e약은요 서비스 키, Supabase service role key 같은 비밀 값은 서버 환경변수에만 저장합니다.
+7. 자동 테스트로 프로필 생성, 권한 경계, 안압·점안 처리, 감사 로그, RLS 차단을 확인했습니다.
 
 ## 6단계 — Supabase SQL Editor에서 임의 SQL을 실행하지 마세요
 
@@ -118,6 +118,35 @@ DATABASE_URL=
 EYAK_SERVICE_KEY=
 ```
 
+## 8단계 — 매직링크가 열릴 주소 등록하기
+
+매직링크는 사용자를 앱으로 되돌려 보내야 하므로, 앱의 주소를 Supabase에 허용 목록으로 등록해야 합니다. 공식 메뉴는 **Authentication → URL Configuration**입니다.[5]
+
+1. Supabase Dashboard에서 `glaucoma-care-dev` 프로젝트를 엽니다.
+2. 왼쪽 메뉴에서 **Authentication**을 누르고 **URL Configuration**을 엽니다. 직접 링크는 [URL Configuration](https://supabase.com/dashboard/project/_/auth/url-configuration)입니다.
+3. **Site URL**에는 실제 공개할 안압케어 주소를 `https://`부터 정확하게 입력합니다. 배포 전이면 아직 임시 주소를 기본값으로 지정하지 않습니다.
+4. **Redirect URLs**에는 개발·검증·운영에서 매직링크를 받은 뒤 돌아올 주소만 하나씩 추가합니다. 임시 미리보기 주소가 필요할 때만 해당 주소를 추가하고, 운영에서는 와일드카드보다 정확한 HTTPS 주소를 사용합니다.
+5. 저장한 뒤 매직링크를 다시 요청해, 링크를 연 브라우저가 안압케어 홈으로 돌아오는지 확인합니다.
+
+> `redirectTo`가 코드에서 지정된 경우에는 그 주소가 Redirect URLs 허용 목록과 일치해야 합니다. Site URL은 `redirectTo`가 없을 때의 기본 복귀 주소입니다.[5]
+
+## 9단계 — SMTP로 이메일 발송 한도 해소하기
+
+Supabase의 기본 이메일 발송 기능은 개발·테스트용입니다. 프로젝트 팀에 등록된 주소로만 보낼 수 있고, 현재 시간당 **2통**이라는 제한이 적용됩니다. 이 제한은 기본 발송 기능에서는 변경할 수 없습니다.[6] 따라서 실제 사용자 로그인에는 사용자 지정 SMTP가 필요합니다.
+
+| 순서 | Dashboard 위치 또는 준비물 | 확인할 내용 |
+|---|---|---|
+| 1 | SMTP 제공업체 계정 | Resend, AWS SES, Postmark, SendGrid, Brevo 등 SMTP를 제공하는 서비스를 선택 |
+| 2 | 발신 도메인 | `auth.example.com` 같은 인증 전용 발신 도메인을 검증하고 SPF·DKIM·DMARC 설정 |
+| 3 | **Authentication → SMTP** | [사용자 지정 SMTP 설정](https://supabase.com/dashboard/project/_/auth/smtp)에서 Custom SMTP를 활성화 |
+| 4 | SMTP 입력 항목 | SMTP Host, Port, Username, Password, Sender email, Sender name 입력 |
+| 5 | **Authentication → Rate Limits** | [Rate Limits](https://supabase.com/dashboard/project/_/auth/rate-limits)에서 SMTP 제공업체의 허용량에 맞게 이메일 발송 한도를 검토 |
+| 6 | 테스트 | 팀 이메일과 별도 테스트 이메일에 매직링크를 각각 한 번 보내고 수신·복귀 주소 확인 |
+
+SMTP 입력값은 **SMTP 제공업체에서 발급한 값만** 사용합니다. `SUPABASE_SERVICE_ROLE_KEY`, 데이터베이스 비밀번호, SMTP 비밀번호는 GitHub·브라우저 코드·일반 채팅에 넣지 않습니다. 저장 뒤에는 Supabase가 새 SMTP를 통해 모든 주소에 메일을 보낼 수 있으며, 기본적으로 시간당 30통의 낮은 보호 한도가 적용되므로 Rate Limits에서 운영 규모에 맞게 검토해야 합니다.[6]
+
+로그인 화면의 60초 재요청 제한은 Supabase의 동일 사용자 OTP/매직링크 제한과도 일치합니다. 사용자가 여러 번 눌러도 발송량이 급증하지 않도록 이 제한은 유지합니다.[7]
+
 ## 오늘 해야 할 일: 아주 짧은 체크리스트
 
 1. Supabase에서 `glaucoma-care-dev` 프로젝트를 만듭니다.
@@ -136,3 +165,6 @@ EYAK_SERVICE_KEY=
 [2]: https://supabase.com/docs/guides/getting-started/quickstarts/reactjs "Use Supabase with React"
 [3]: https://supabase.com/docs/guides/database/connecting-to-postgres "Connect to your database"
 [4]: https://supabase.com/docs/guides/auth "Supabase Auth"
+[5]: https://supabase.com/docs/guides/auth/redirect-urls "Supabase Auth Redirect URLs"
+[6]: https://supabase.com/docs/guides/auth/auth-smtp "Supabase Custom SMTP"
+[7]: https://supabase.com/docs/guides/auth/rate-limits "Supabase Auth Rate Limits"
