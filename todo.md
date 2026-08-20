@@ -22,6 +22,8 @@
 - [x] 전환: Supabase PostgreSQL·Auth 기반으로 데이터와 인증을 옮기기 위한 프로젝트 설정, 스키마 변환, 환경변수 등록 계획을 확정한다.
 - [ ] 운영: Supabase 전환 후 웹 앱 호스팅과 대여 기기 알림 Heartbeat를 배포 환경에 연결하고 검증한다.
 - [ ] 전환: Supabase PostgreSQL용 스키마·마이그레이션·역할 테이블과 patient·physician·educator·admin RLS 정책을 구현한다. (SQL 적용 완료, 역할별 RLS 실사용 검증 대기)
+- [x] 보안: Supabase RLS의 기본 grant를 최소 권한으로 제한하고 private 보안 함수로 역할 정책을 실행한다.
+- [x] 검증: 실제 Supabase PostgreSQL 세션에서 patient와 admin의 RLS 조회 범위를 자동 테스트한다.
 - [x] 전환: Supabase 프로젝트 URL·공개 키·서버 키·Transaction pooler 연결 문자열을 안전하게 검증하고 PostgreSQL 전환에 사용한다.
 - [x] 전환: 기존 MySQL Drizzle 기록과 분리된 Supabase PostgreSQL 전용 마이그레이션을 생성·검토·적용한다.
 - [ ] 전환: Supabase Auth UUID 프로필·기관·patient·physician·educator·admin 역할을 RLS 정책으로 분리하고 실사용 권한을 검증한다. (RLS 정책 적용 완료, 역할별 허용·차단 검증 대기)
@@ -32,6 +34,7 @@
 - [ ] 전환: 안압·점안·기기·알림·감사 로그 API와 대시보드 데이터를 Supabase PostgreSQL로 전환하고 RLS를 검증한다. (서버 API·UUID 프로필·PostgreSQL 충돌 처리 완료, 인증 상태 통합 검증 대기)
 - [ ] 운영: Supabase Dashboard의 Authentication → URL Configuration에서 Site URL과 Redirect URL에 현재 앱 주소를 등록하고, 실제 이메일 매직링크 로그인을 확인한다.
 - [ ] 운영: Supabase Auth 이메일 발송 제한이 해제된 뒤 매직링크 로그인을 재검증하거나, 운영 전용 SMTP를 연결해 발송 한도를 해소한다.
+- [x] UI: 이메일 매직링크 요청 뒤 60초 재요청 제한과 발송 한도 초과 시 60분 안내를 적용한다.
 - [ ] 운영: 새 Supabase Dashboard 메뉴에서 사용자 지정 SMTP 설정의 정확한 경로를 확인하고 연결 절차를 문서화한다.
 - [ ] 정리: 예약 작업용 코드와 분리해 일반 사용자 경로에서 더 이상 Manus OAuth 초기화 로그가 남지 않도록 정리한다.
 - [x] 문서: Supabase Dashboard에서 안압케어 테이블·RLS·데이터를 확인하고 앱 연동 구조를 이해하는 초보자용 절차를 정리한다. (가이드 파일 저장·내용 확인 완료)
