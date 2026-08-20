@@ -25,7 +25,13 @@
 - [x] 전환: Supabase 프로젝트 URL·공개 키·서버 키·Transaction pooler 연결 문자열을 안전하게 검증하고 PostgreSQL 전환에 사용한다.
 - [x] 전환: 기존 MySQL Drizzle 기록과 분리된 Supabase PostgreSQL 전용 마이그레이션을 생성·검토·적용한다.
 - [ ] 전환: Supabase Auth UUID 프로필·기관·patient·physician·educator·admin 역할을 RLS 정책으로 분리하고 실사용 권한을 검증한다. (RLS 정책 적용 완료, 역할별 허용·차단 검증 대기)
+- [ ] 검증: 로그인한 Supabase Auth 사용자의 기본 patient 역할·기관·환자 프로필 자동 생성과 역할별 RLS 접근을 검증한다.
+- [x] 운영: 첫 Supabase Auth 계정을 admin으로 초기화해 기관 사용자 역할을 관리할 수 있도록 한다.
+- [ ] 운영: 지정한 초기 운영자 이메일의 Supabase 프로필을 admin으로 승격하고 관리 대시보드 접근을 확인한다. (DB 역할 승격 검증 완료, 브라우저 대시보드 확인 대기)
 - [ ] 전환: Manus OAuth 의존성을 Supabase Auth 세션과 로그인·로그아웃·사용자 프로필 흐름으로 교체한다. (코드 교체 완료, 실제 매직링크 로그인·로그아웃 검증 대기)
 - [ ] 전환: 안압·점안·기기·알림·감사 로그 API와 대시보드 데이터를 Supabase PostgreSQL로 전환하고 RLS를 검증한다. (서버 API·UUID 프로필·PostgreSQL 충돌 처리 완료, 인증 상태 통합 검증 대기)
 - [ ] 운영: Supabase Dashboard의 Authentication → URL Configuration에서 Site URL과 Redirect URL에 현재 앱 주소를 등록하고, 실제 이메일 매직링크 로그인을 확인한다.
+- [ ] 운영: Supabase Auth 이메일 발송 제한이 해제된 뒤 매직링크 로그인을 재검증하거나, 운영 전용 SMTP를 연결해 발송 한도를 해소한다.
+- [ ] 운영: 새 Supabase Dashboard 메뉴에서 사용자 지정 SMTP 설정의 정확한 경로를 확인하고 연결 절차를 문서화한다.
 - [ ] 정리: 예약 작업용 코드와 분리해 일반 사용자 경로에서 더 이상 Manus OAuth 초기화 로그가 남지 않도록 정리한다.
+- [x] 문서: Supabase Dashboard에서 안압케어 테이블·RLS·데이터를 확인하고 앱 연동 구조를 이해하는 초보자용 절차를 정리한다. (가이드 파일 저장·내용 확인 완료)

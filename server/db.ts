@@ -49,7 +49,10 @@ export async function getUserById(id: string) {
 export async function provisionSupabaseUser(input: { id: string; email?: string | null; name?: string | null }) {
   const existing = await getUserById(input.id);
   if (existing) {
-    await upsertUser({ ...existing, name: input.name ?? existing.name, email: input.email ?? existing.email, lastSignedIn: new Date() });
+    const connection = await requireDb();
+    const totalProfiles = await connection.select({ id: users.id }).from(users).limit(2);
+    const role = totalProfiles.length === 1 && existing.role === "patient" ? "admin" : existing.role;
+    await upsertUser({ ...existing, role, name: input.name ?? existing.name, email: input.email ?? existing.email, lastSignedIn: new Date() });
     return (await getUserById(input.id))!;
   }
   const connection = await requireDb();
