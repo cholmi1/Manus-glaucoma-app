@@ -15,6 +15,7 @@ import {
 } from "../../drizzle/schema";
 import { appendAuditLog } from "../audit";
 import { ensureServiceWorkspace, getPatientForUser, requireDb } from "../db";
+import { calculateAdherence, deduplicateByIdempotency } from "../domain";
 import { clinicianProcedure, protectedProcedure, router } from "../_core/trpc";
 
 const eyeSchema = z.enum(["OD", "OS"]);
@@ -153,7 +154,8 @@ export const clinicalRouter = router({
           return { stored: 0, rejected: input.items.length, reason: "RENTAL_BLOCKED" as const };
         }
       }
-      for (const item of input.items) {
+      const uniqueItems = deduplicateByIdempotency(input.items);
+      for (const item of uniqueItems) {
         await db.insert(iopMeasurements).values({
           organizationId: organization.id,
           patientId: input.patientId,
@@ -167,8 +169,8 @@ export const clinicalRouter = router({
           context: item.context ?? null,
         }).onDuplicateKeyUpdate({ set: { idempotencyKey: sql`${iopMeasurements.idempotencyKey}` } });
       }
-      await appendAuditLog({ organizationId: organization.id, actorUserId: actor.id, patientId: input.patientId, action: "measurement_upload", targetType: "iop_measurement", detail: { count: input.items.length, source: input.items[0]?.source } });
-      return { stored: input.items.length, rejected: 0, reason: null };
+      await appendAuditLog({ organizationId: organization.id, actorUserId: actor.id, patientId: input.patientId, action: "measurement_upload", targetType: "iop_measurement", detail: { count: uniqueItems.length, duplicateCount: input.items.length - uniqueItems.length, source: uniqueItems[0]?.source } });
+      return { stored: uniqueItems.length, rejected: 0, reason: null };
     }),
     list: protectedProcedure.input(z.object({ patientId: z.number().int().positive(), from: dateInput.optional(), to: dateInput.optional(), includeExcluded: z.boolean().optional().default(false) })).query(async ({ ctx, input }) => {
       const actor = ctx.user!;
@@ -204,12 +206,13 @@ export const clinicalRouter = router({
       const db = await requireDb();
       const activePrescriptions = await db.select({ id: prescriptions.id }).from(prescriptions).where(and(eq(prescriptions.patientId, input.patientId), eq(prescriptions.organizationId, organization.id)));
       const allowed = new Set(activePrescriptions.map(item => item.id));
-      if (input.events.some(event => !allowed.has(event.prescriptionId))) throw forbidden("현재 환자의 처방에 속하지 않는 점안 이벤트가 포함되어 있습니다.");
-      for (const event of input.events) {
+      const uniqueEvents = deduplicateByIdempotency(input.events);
+      if (uniqueEvents.some(event => !allowed.has(event.prescriptionId))) throw forbidden("현재 환자의 처방에 속하지 않는 점안 이벤트가 포함되어 있습니다.");
+      for (const event of uniqueEvents) {
         await db.insert(doseEvents).values({ organizationId: organization.id, patientId: input.patientId, prescriptionId: event.prescriptionId, scheduledDate: event.scheduledDate, scheduledTime: event.scheduledTime, eye: event.eye, taken: event.taken, takenAt: event.taken ? (event.takenAt ?? new Date()) : null, source: event.source, idempotencyKey: event.idempotencyKey }).onDuplicateKeyUpdate({ set: { taken: event.taken, takenAt: event.taken ? (event.takenAt ?? new Date()) : null, source: event.source, updatedAt: new Date() } });
       }
-      await appendAuditLog({ organizationId: organization.id, actorUserId: actor.id, patientId: input.patientId, action: "dose_sync", targetType: "dose_event", detail: { count: input.events.length } });
-      return { synced: input.events.length };
+      await appendAuditLog({ organizationId: organization.id, actorUserId: actor.id, patientId: input.patientId, action: "dose_sync", targetType: "dose_event", detail: { count: uniqueEvents.length, duplicateCount: input.events.length - uniqueEvents.length } });
+      return { synced: uniqueEvents.length };
     }),
     adherence: protectedProcedure.input(z.object({ patientId: z.number().int().positive(), from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ ctx, input }) => {
       const actor = ctx.user!;
@@ -217,9 +220,7 @@ export const clinicalRouter = router({
       await assertPatientAccess({ actor, patientId: input.patientId, organizationId: organization.id });
       const db = await requireDb();
       const events = await db.select().from(doseEvents).where(and(eq(doseEvents.patientId, input.patientId), gte(doseEvents.scheduledDate, input.from), lte(doseEvents.scheduledDate, input.to)));
-      const total = events.length;
-      const taken = events.filter(event => event.taken).length;
-      return { total, taken, percentage: total ? Math.round((taken / total) * 100) : 0 };
+      return calculateAdherence(events);
     }),
   }),
 

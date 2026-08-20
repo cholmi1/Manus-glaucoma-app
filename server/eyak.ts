@@ -15,6 +15,10 @@ export function hasEyakServiceKey() {
   return ENV.eyakServiceKey.trim().length > 0;
 }
 
+export function isEyakSearchEnabled() {
+  return hasEyakServiceKey() && ENV.eyakProxyEnabled;
+}
+
 export async function fetchEyakRaw(params: Record<string, string>) {
   if (!hasEyakServiceKey()) throw new Error("e약은요 서비스 키가 설정되지 않았습니다.");
   const url = new URL(EYAK_LIST_ENDPOINT);
@@ -35,6 +39,7 @@ function asText(value: unknown) {
 }
 
 export async function searchEyak(query: string): Promise<EyakMedicine[]> {
+  if (!isEyakSearchEnabled()) throw new Error("e약은요 검색은 인증키 검증 후 활성화됩니다.");
   const raw = await fetchEyakRaw({ itemName: query });
   const parsed = JSON.parse(raw) as { body?: { items?: Array<Record<string, unknown>> | { item?: Array<Record<string, unknown>> } } };
   const items = Array.isArray(parsed.body?.items) ? parsed.body.items : parsed.body?.items?.item ?? [];
